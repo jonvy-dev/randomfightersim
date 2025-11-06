@@ -71,8 +71,6 @@ class Game {
         this.arenaWidth = this.arena.offsetWidth;
         this.arenaHeight = this.arena.offsetHeight;
         
-        console.log('Arena size:', this.arenaWidth, 'x', this.arenaHeight);
-        
         this.initializeFighters();
         this.updateStatsDisplay();
         this.showMessage('FIGHT!');
@@ -89,46 +87,32 @@ class Game {
         const f1Size = this.fighter1.getSize();
         const f2Size = this.fighter2.getSize();
         
-        console.log('Fighter 1 size:', f1Size);
-        console.log('Fighter 2 size:', f2Size);
-        
-        // Position Fighter 1 on the left
-        this.fighter1.x = 50;
-        this.fighter1.y = 100;
+        this.fighter1.x = this.arenaWidth * 0.25 - f1Size / 2;
+        this.fighter1.y = this.arenaHeight * 0.3;
         this.fighter1.width = f1Size;
         this.fighter1.height = f1Size;
         this.fighter1.vx = 0;
         this.fighter1.vy = 0;
         
-        // Position Fighter 2 on the right
-        this.fighter2.x = this.arenaWidth - f2Size - 50;
-        this.fighter2.y = 100;
+        this.fighter2.x = this.arenaWidth * 0.75 - f2Size / 2;
+        this.fighter2.y = this.arenaHeight * 0.3;
         this.fighter2.width = f2Size;
         this.fighter2.height = f2Size;
         this.fighter2.vx = 0;
         this.fighter2.vy = 0;
         
-        console.log('Fighter 1 position:', this.fighter1.x, this.fighter1.y);
-        console.log('Fighter 2 position:', this.fighter2.x, this.fighter2.y);
-        
-        // Setup Fighter 1 sprite
         const f1Sprite = document.getElementById('fighter1Sprite');
+        const f2Sprite = document.getElementById('fighter2Sprite');
+        
         f1Sprite.innerHTML = `<img src="${this.fighter1.imageUrl}" alt="${this.fighter1.name}">`;
+        f2Sprite.innerHTML = `<img src="${this.fighter2.imageUrl}" alt="${this.fighter2.name}">`;
+        
         f1Sprite.style.width = f1Size + 'px';
         f1Sprite.style.height = f1Size + 'px';
-        f1Sprite.style.display = 'block';
-        
-        // Setup Fighter 2 sprite
-        const f2Sprite = document.getElementById('fighter2Sprite');
-        f2Sprite.innerHTML = `<img src="${this.fighter2.imageUrl}" alt="${this.fighter2.name}">`;
         f2Sprite.style.width = f2Size + 'px';
         f2Sprite.style.height = f2Size + 'px';
-        f2Sprite.style.display = 'block';
         
-        // Force initial position update
         this.updateFighterPositions();
-        
-        console.log('Fighters initialized');
     }
     
     updateStatsDisplay() {
@@ -198,12 +182,6 @@ class Game {
                 }
             }
             
-            // Ceiling collision
-            if (fighter.y < 0) {
-                fighter.y = 0;
-                fighter.vy = -fighter.vy * this.bounceEnergy;
-            }
-            
             // Wall collisions
             if (fighter.x < 0) {
                 fighter.x = 0;
@@ -214,7 +192,165 @@ class Game {
                 fighter.vx = -fighter.vx * this.bounceEnergy;
             }
             
-            // Ring-out detection (much more lenient)
-            if (fighter.y > this.arenaHeight + fighter.height * 2) {
+            // Ring-out detection
+            if (fighter.y < -fighter.height * 2 || 
+                fighter.x < -fighter.width * 2 || 
+                fighter.x > this.arenaWidth + fighter.width) {
                 fighter.isActive = false;
-                const otherFighter = fighter === this.fighter1 ? this.fig
+                this.showMessage(`${fighter.name} was knocked out of the arena!`);
+                this.endGame();
+            }
+        });
+    }
+    
+    updateAI(elapsedTime) {
+        // Fighter 1 AI
+        if (elapsedTime - this.fighter1.lastAIAction > 600) {
+            this.applyAIForce(this.fighter1, this.fighter2);
+            this.fighter1.lastAIAction = elapsedTime;
+        }
+        
+        // Fighter 2 AI
+        if (elapsedTime - this.fighter2.lastAIAction > 650) {
+            this.applyAIForce(this.fighter2, this.fighter1);
+            this.fighter2.lastAIAction = elapsedTime;
+        }
+    }
+    
+    applyAIForce(fighter, target) {
+        if (!fighter.isActive || !target.isActive) return;
+        
+        const dx = (target.x + target.width / 2) - (fighter.x + fighter.width / 2);
+        const dy = (target.y + target.height / 2) - (fighter.y + fighter.height / 2);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance > 0) {
+            const speedFactor = fighter.speed / 100;
+            const forceMagnitude = 2 + speedFactor * 3;
+            
+            fighter.vx += (dx / distance) * forceMagnitude;
+            
+            // Jump towards opponent if grounded
+            if (Math.abs(fighter.vy) < 0.5 && fighter.y + fighter.height >= this.arenaHeight - 5) {
+                fighter.vy -= 8 + speedFactor * 4;
+            }
+        }
+    }
+    
+    checkCollision() {
+        if (!this.fighter1.isActive || !this.fighter2.isActive) return;
+        
+        const f1CenterX = this.fighter1.x + this.fighter1.width / 2;
+        const f1CenterY = this.fighter1.y + this.fighter1.height / 2;
+        const f2CenterX = this.fighter2.x + this.fighter2.width / 2;
+        const f2CenterY = this.fighter2.y + this.fighter2.height / 2;
+        
+        const dx = f2CenterX - f1CenterX;
+        const dy = f2CenterY - f1CenterY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const minDistance = (this.fighter1.width + this.fighter2.width) / 2;
+        
+        if (distance < minDistance) {
+            // Separate fighters
+            const angle = Math.atan2(dy, dx);
+            const overlap = minDistance - distance;
+            
+            this.fighter1.x -= Math.cos(angle) * overlap / 2;
+            this.fighter1.y -= Math.sin(angle) * overlap / 2;
+            this.fighter2.x += Math.cos(angle) * overlap / 2;
+            this.fighter2.y += Math.sin(angle) * overlap / 2;
+            
+            this.resolveCollision(this.fighter1, this.fighter2, dx, dy);
+        }
+    }
+    
+    resolveCollision(f1, f2, dx, dy) {
+        const angle = Math.atan2(dy, dx);
+        
+        const v1 = Math.sqrt(f1.vx * f1.vx + f1.vy * f1.vy);
+        const v2 = Math.sqrt(f2.vx * f2.vx + f2.vy * f2.vy);
+        
+        const attacker = v1 > v2 ? f1 : f2;
+        const defender = v1 > v2 ? f2 : f1;
+        const direction = v1 > v2 ? 1 : -1;
+        
+        // Dodge check
+        const dodgeChance = defender.speed / 400;
+        const dodged = Math.random() < dodgeChance;
+        
+        if (dodged) {
+            this.showMessage(`${defender.name} dodged!`);
+        } else {
+            // Damage calculation
+            const damageReductionChance = defender.defense / 300;
+            const damageReduced = Math.random() < damageReductionChance;
+            
+            let damage = (attacker.strength / 8) + Math.random() * 5;
+            if (damageReduced) {
+                damage *= 0.4;
+                this.showMessage(`${defender.name} blocked!`);
+            } else {
+                this.showMessage(`${attacker.name} hit ${defender.name}!`);
+            }
+            
+            defender.health -= damage;
+            this.updateHealthDisplay();
+        }
+        
+        // Knockback
+        const knockbackPower = (attacker.strength / 80) * 8;
+        const resistance = (defender.defense / 100);
+        const knockbackMagnitude = knockbackPower / (1 + resistance * 0.3);
+        
+        defender.vx += Math.cos(angle) * knockbackMagnitude * direction;
+        defender.vy += Math.sin(angle) * knockbackMagnitude * direction - 2;
+        
+        attacker.vx -= Math.cos(angle) * knockbackMagnitude * 0.2 * direction;
+        attacker.vy -= Math.sin(angle) * knockbackMagnitude * 0.2 * direction;
+    }
+    
+    updateFighterPositions() {
+        const f1Sprite = document.getElementById('fighter1Sprite');
+        const f2Sprite = document.getElementById('fighter2Sprite');
+        
+        f1Sprite.style.left = this.fighter1.x + 'px';
+        f1Sprite.style.top = this.fighter1.y + 'px';
+        
+        f2Sprite.style.left = this.fighter2.x + 'px';
+        f2Sprite.style.top = this.fighter2.y + 'px';
+    }
+    
+    checkVictory() {
+        if (this.fighter1.health <= 0 && this.fighter1.isActive) {
+            this.fighter1.isActive = false;
+            this.showMessage(`${this.fighter2.name} WINS by knockout!`);
+            this.endGame();
+        } else if (this.fighter2.health <= 0 && this.fighter2.isActive) {
+            this.fighter2.isActive = false;
+            this.showMessage(`${this.fighter1.name} WINS by knockout!`);
+            this.endGame();
+        }
+    }
+    
+    showMessage(msg) {
+        document.getElementById('messageBox').textContent = msg;
+    }
+    
+    endGame() {
+        this.gameRunning = false;
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+        }
+    }
+    
+    resetGame() {
+        this.endGame();
+        document.getElementById('setupPanel').style.display = 'flex';
+        document.getElementById('gameContainer').style.display = 'none';
+        this.fighter1 = null;
+        this.fighter2 = null;
+    }
+}
+
+// Initialize game when page loads
+const game = new Game();
