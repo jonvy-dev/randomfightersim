@@ -1,0 +1,74 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Randomized Physics Fighter Simulator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Randomized Physics Fighter Simulator</h1>
+        
+        <div class="setup-panel" id="setupPanel">
+            <div class="fighter-setup">
+                <h2>Fighter 1</h2>
+                <input type="text" id="fighter1Name" placeholder="Fighter 1 Name" value="Red Fighter">
+                <input type="text" id="fighter1Image" placeholder="Image URL" value="https://via.placeholder.com/100/ff0000/ffffff?text=F1">
+            </div>
+            
+            <div class="fighter-setup">
+                <h2>Fighter 2</h2>
+                <input type="text" id="fighter2Name" placeholder="Fighter 2 Name" value="Blue Fighter">
+                <input type="text" id="fighter2Image" placeholder="Image URL" value="https://via.placeholder.com/100/0000ff/ffffff?text=F2">
+            </div>
+            
+            <button id="startButton" class="start-button">START FIGHT</button>
+        </div>
+        
+        <div class="game-container" id="gameContainer" style="display: none;">
+            <div class="stats-panel">
+                <div class="fighter-stats" id="fighter1Stats">
+                    <h3 id="fighter1NameDisplay"></h3>
+                    <div class="stat-bar">
+                        <span>HP:</span>
+                        <div class="hp-bar">
+                            <div class="hp-fill" id="fighter1HP"></div>
+                        </div>
+                        <span id="fighter1HPText">100/100</span>
+                    </div>
+                    <div class="stat-detail">STR: <span id="fighter1Str"></span></div>
+                    <div class="stat-detail">DEF: <span id="fighter1Def"></span></div>
+                    <div class="stat-detail">SPD: <span id="fighter1Spd"></span></div>
+                </div>
+                
+                <div class="fighter-stats" id="fighter2Stats">
+                    <h3 id="fighter2NameDisplay"></h3>
+                    <div class="stat-bar">
+                        <span>HP:</span>
+                        <div class="hp-bar">
+                            <div class="hp-fill" id="fighter2HP"></div>
+                        </div>
+                        <span id="fighter2HPText">100/100</span>
+                    </div>
+                    <div class="stat-detail">STR: <span id="fighter2Str"></span></div>
+                    <div class="stat-detail">DEF: <span id="fighter2Def"></span></div>
+                    <div class="stat-detail">SPD: <span id="fighter2Spd"></span></div>
+                </div>
+            </div>
+            
+            <div class="arena" id="arena">
+                <div class="fighter" id="fighter1Sprite"></div>
+                <div class="fighter" id="fighter2Sprite"></div>
+            </div>
+            
+            <div class="message-box" id="messageBox"></div>
+            
+            <button id="restartButton" class="restart-button">NEW FIGHT</button>
+        </div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html>
