@@ -40,12 +40,12 @@ class Game {
         this.arena = null;
         this.arenaWidth = 0;
         this.arenaHeight = 0;
-        this.gravity = 0.3;
+        this.gravity = 0.5;
         this.friction = 0.98;
         this.bounceEnergy = 0.6;
         this.gameRunning = false;
         this.animationId = null;
-        this.lastTime = 0;
+        this.startTime = 0;
         
         this.setupEventListeners();
     }
@@ -76,23 +76,30 @@ class Game {
         this.showMessage('FIGHT!');
         
         this.gameRunning = true;
-        this.lastTime = performance.now();
-        this.gameLoop();
+        this.startTime = performance.now();
+        this.fighter1.lastAIAction = 0;
+        this.fighter2.lastAIAction = 0;
+        
+        requestAnimationFrame((t) => this.gameLoop(t));
     }
     
     initializeFighters() {
         const f1Size = this.fighter1.getSize();
         const f2Size = this.fighter2.getSize();
         
-        this.fighter1.x = this.arenaWidth * 0.25;
+        this.fighter1.x = this.arenaWidth * 0.25 - f1Size / 2;
         this.fighter1.y = this.arenaHeight * 0.3;
         this.fighter1.width = f1Size;
         this.fighter1.height = f1Size;
+        this.fighter1.vx = 0;
+        this.fighter1.vy = 0;
         
-        this.fighter2.x = this.arenaWidth * 0.75;
+        this.fighter2.x = this.arenaWidth * 0.75 - f2Size / 2;
         this.fighter2.y = this.arenaHeight * 0.3;
         this.fighter2.width = f2Size;
         this.fighter2.height = f2Size;
+        this.fighter2.vx = 0;
+        this.fighter2.vy = 0;
         
         const f1Sprite = document.getElementById('fighter1Sprite');
         const f2Sprite = document.getElementById('fighter2Sprite');
@@ -104,6 +111,8 @@ class Game {
         f1Sprite.style.height = f1Size + 'px';
         f2Sprite.style.width = f2Size + 'px';
         f2Sprite.style.height = f2Size + 'px';
+        
+        this.updateFighterPositions();
     }
     
     updateStatsDisplay() {
@@ -137,11 +146,10 @@ class Game {
     gameLoop(currentTime) {
         if (!this.gameRunning) return;
         
-        const deltaTime = Math.min((currentTime - this.lastTime) / 16.67, 2);
-        this.lastTime = currentTime;
+        const elapsedTime = currentTime - this.startTime;
         
-        this.updatePhysics(deltaTime);
-        this.updateAI(currentTime);
+        this.updateAI(elapsedTime);
+        this.updatePhysics();
         this.checkCollision();
         this.updateFighterPositions();
         this.checkVictory();
@@ -149,28 +157,32 @@ class Game {
         this.animationId = requestAnimationFrame((t) => this.gameLoop(t));
     }
     
-    updatePhysics(dt) {
+    updatePhysics() {
         [this.fighter1, this.fighter2].forEach(fighter => {
             if (!fighter.isActive) return;
             
-            fighter.vy += this.gravity * dt;
+            // Apply gravity
+            fighter.vy += this.gravity;
             
-            fighter.vx *= Math.pow(this.friction, dt);
-            fighter.vy *= Math.pow(0.995, dt);
+            // Apply friction
+            fighter.vx *= this.friction;
             
-            fighter.x += fighter.vx * dt;
-            fighter.y += fighter.vy * dt;
+            // Update position
+            fighter.x += fighter.vx;
+            fighter.y += fighter.vy;
             
+            // Ground collision
             if (fighter.y + fighter.height > this.arenaHeight) {
                 fighter.y = this.arenaHeight - fighter.height;
                 fighter.vy = -fighter.vy * this.bounceEnergy;
-                fighter.vx *= 0.8;
+                fighter.vx *= 0.85;
                 
-                if (Math.abs(fighter.vy) < 0.5) {
+                if (Math.abs(fighter.vy) < 1) {
                     fighter.vy = 0;
                 }
             }
             
+            // Wall collisions
             if (fighter.x < 0) {
                 fighter.x = 0;
                 fighter.vx = -fighter.vx * this.bounceEnergy;
@@ -180,6 +192,7 @@ class Game {
                 fighter.vx = -fighter.vx * this.bounceEnergy;
             }
             
+            // Ring-out detection
             if (fighter.y < -fighter.height * 2 || 
                 fighter.x < -fighter.width * 2 || 
                 fighter.x > this.arenaWidth + fighter.width) {
@@ -190,53 +203,68 @@ class Game {
         });
     }
     
-    updateAI(currentTime) {
-        if (currentTime - this.fighter1.lastAIAction > 800) {
+    updateAI(elapsedTime) {
+        // Fighter 1 AI
+        if (elapsedTime - this.fighter1.lastAIAction > 600) {
             this.applyAIForce(this.fighter1, this.fighter2);
-            this.fighter1.lastAIAction = currentTime;
+            this.fighter1.lastAIAction = elapsedTime;
         }
         
-        if (currentTime - this.fighter2.lastAIAction > 800) {
+        // Fighter 2 AI
+        if (elapsedTime - this.fighter2.lastAIAction > 650) {
             this.applyAIForce(this.fighter2, this.fighter1);
-            this.fighter2.lastAIAction = currentTime;
+            this.fighter2.lastAIAction = elapsedTime;
         }
     }
     
     applyAIForce(fighter, target) {
         if (!fighter.isActive || !target.isActive) return;
         
-        const dx = target.x - fighter.x;
-        const dy = target.y - fighter.y;
+        const dx = (target.x + target.width / 2) - (fighter.x + fighter.width / 2);
+        const dy = (target.y + target.height / 2) - (fighter.y + fighter.height / 2);
         const distance = Math.sqrt(dx * dx + dy * dy);
         
         if (distance > 0) {
-            const forceMagnitude = (fighter.speed / 100) * 0.4;
+            const speedFactor = fighter.speed / 100;
+            const forceMagnitude = 2 + speedFactor * 3;
+            
             fighter.vx += (dx / distance) * forceMagnitude;
-            fighter.vy += (dy / distance) * forceMagnitude * 0.6;
+            
+            // Jump towards opponent if grounded
+            if (Math.abs(fighter.vy) < 0.5 && fighter.y + fighter.height >= this.arenaHeight - 5) {
+                fighter.vy -= 8 + speedFactor * 4;
+            }
         }
     }
     
     checkCollision() {
         if (!this.fighter1.isActive || !this.fighter2.isActive) return;
         
-        const dx = (this.fighter2.x + this.fighter2.width / 2) - (this.fighter1.x + this.fighter1.width / 2);
-        const dy = (this.fighter2.y + this.fighter2.height / 2) - (this.fighter1.y + this.fighter1.height / 2);
+        const f1CenterX = this.fighter1.x + this.fighter1.width / 2;
+        const f1CenterY = this.fighter1.y + this.fighter1.height / 2;
+        const f2CenterX = this.fighter2.x + this.fighter2.width / 2;
+        const f2CenterY = this.fighter2.y + this.fighter2.height / 2;
+        
+        const dx = f2CenterX - f1CenterX;
+        const dy = f2CenterY - f1CenterY;
         const distance = Math.sqrt(dx * dx + dy * dy);
         const minDistance = (this.fighter1.width + this.fighter2.width) / 2;
         
         if (distance < minDistance) {
+            // Separate fighters
             const angle = Math.atan2(dy, dx);
-            const targetX = (this.fighter1.x + this.fighter1.width / 2) + Math.cos(angle) * minDistance;
-            const targetY = (this.fighter1.y + this.fighter1.height / 2) + Math.sin(angle) * minDistance;
+            const overlap = minDistance - distance;
             
-            this.fighter2.x = targetX - this.fighter2.width / 2;
-            this.fighter2.y = targetY - this.fighter2.height / 2;
+            this.fighter1.x -= Math.cos(angle) * overlap / 2;
+            this.fighter1.y -= Math.sin(angle) * overlap / 2;
+            this.fighter2.x += Math.cos(angle) * overlap / 2;
+            this.fighter2.y += Math.sin(angle) * overlap / 2;
             
-            this.resolveCollision(this.fighter1, this.fighter2, dx, dy, distance);
+            this.resolveCollision(this.fighter1, this.fighter2, dx, dy);
         }
     }
     
-    resolveCollision(f1, f2, dx, dy, distance) {
+    resolveCollision(f1, f2, dx, dy) {
         const angle = Math.atan2(dy, dx);
         
         const v1 = Math.sqrt(f1.vx * f1.vx + f1.vy * f1.vy);
@@ -246,34 +274,39 @@ class Game {
         const defender = v1 > v2 ? f2 : f1;
         const direction = v1 > v2 ? 1 : -1;
         
-        const dodgeChance = defender.speed / 300;
+        // Dodge check
+        const dodgeChance = defender.speed / 400;
         const dodged = Math.random() < dodgeChance;
         
         if (dodged) {
-            this.showMessage(`${defender.name} dodged the attack!`);
+            this.showMessage(`${defender.name} dodged!`);
         } else {
-            const damageReductionChance = defender.defense / 250;
+            // Damage calculation
+            const damageReductionChance = defender.defense / 300;
             const damageReduced = Math.random() < damageReductionChance;
             
-            let damage = (attacker.strength / 10) * (1 + Math.random() * 0.5);
+            let damage = (attacker.strength / 8) + Math.random() * 5;
             if (damageReduced) {
-                damage *= 0.5;
-                this.showMessage(`${defender.name} reduced damage!`);
+                damage *= 0.4;
+                this.showMessage(`${defender.name} blocked!`);
+            } else {
+                this.showMessage(`${attacker.name} hit ${defender.name}!`);
             }
             
             defender.health -= damage;
             this.updateHealthDisplay();
         }
         
-        const knockbackPower = (attacker.strength / 100) * 1.5;
-        const resistance = (defender.defense / 100) * 0.5;
-        const knockbackMagnitude = knockbackPower / (1 + resistance);
+        // Knockback
+        const knockbackPower = (attacker.strength / 80) * 8;
+        const resistance = (defender.defense / 100);
+        const knockbackMagnitude = knockbackPower / (1 + resistance * 0.3);
         
         defender.vx += Math.cos(angle) * knockbackMagnitude * direction;
-        defender.vy += Math.sin(angle) * knockbackMagnitude * direction - 0.5;
+        defender.vy += Math.sin(angle) * knockbackMagnitude * direction - 2;
         
-        attacker.vx -= Math.cos(angle) * knockbackMagnitude * 0.3 * direction;
-        attacker.vy -= Math.sin(angle) * knockbackMagnitude * 0.3 * direction;
+        attacker.vx -= Math.cos(angle) * knockbackMagnitude * 0.2 * direction;
+        attacker.vy -= Math.sin(angle) * knockbackMagnitude * 0.2 * direction;
     }
     
     updateFighterPositions() {
@@ -319,4 +352,5 @@ class Game {
     }
 }
 
+// Initialize game when page loads
 const game = new Game();
